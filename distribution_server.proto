@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+option go_package = "github.com/Adarsh-Kmt/DistributionServer/main";
+
+message DistributionServerMessage{
+
+    string senderId = 1;
+    string receiverId = 2;
+    string body = 3;
+}
+
+message DistributionServerConnectionRequest{
+
+    string userId = 1;
+    string EndServerAddress = 2;
+}
+
+message DistributionServerResponse{
+
+    int32 responseStatus = 1;
+}
+
+service DistributionServerMessageService{
+
+    rpc SendMessage(DistributionServerMessage) returns (DistributionServerResponse) {}
+    rpc UserConnected(DistributionServerConnectionRequest) returns (DistributionServerResponse) {}
+    rpc UserDisconnected(DistributionServerConnectionRequest) returns (DistributionServerResponse) {}
+}

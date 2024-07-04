@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+option go_package  = "github.com/Adarsh-Kmt/DistributionServer/main";
+
+
+message EndServerMessage{
+
+    string body = 1;
+    string senderId = 2;
+    string receiverId = 3;
+
+}
+
+message EndServerResponse{
+    int32 status = 1;
+}
+
+service EndServerMessageService{
+
+    rpc ReceiveMessage(EndServerMessage) returns (EndServerResponse) {}
+}
