@@ -4,7 +4,7 @@
 // - protoc             v5.27.1
 // source: distribution_server.proto
 
-package main
+package generatedCode
 
 import (
 	context "context"

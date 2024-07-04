@@ -5,6 +5,8 @@ import (
 	"net"
 	"sync"
 
+	generatedCode "github.com/Adarsh-Kmt/DistributionServer/generatedCode"
+
 	"google.golang.org/grpc"
 )
 
@@ -31,7 +33,7 @@ func main() {
 
 	GRPCDistributionServer := grpc.NewServer()
 
-	RegisterDistributionServerMessageServiceServer(GRPCDistributionServer, distributionServerInstance)
+	generatedCode.RegisterDistributionServerMessageServiceServer(GRPCDistributionServer, distributionServerInstance)
 
 	wg.Add(1)
 	go DistributionServerStartListening(GRPCDistributionServer, &wg)
