@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"log"
 
+	database "github.com/Adarsh-Kmt/DistributionServer/database"
 	generatedCode "github.com/Adarsh-Kmt/DistributionServer/generatedCode"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -14,33 +14,39 @@ type DistributionServer struct {
 	generatedCode.UnimplementedDistributionServerMessageServiceServer
 
 	endServerClientMap map[string]generatedCode.EndServerMessageServiceClient
-	activeUserConn     map[string]string
+	//activeUserConn     map[string]string
+	RedisDBStore *database.RedisDBStore
 }
 
 func NewDistributionServerInstance() *DistributionServer {
 
+	RedisDBStoreInstance := database.NewRedisDBInstance()
 	return &DistributionServer{
 		endServerClientMap: make(map[string]generatedCode.EndServerMessageServiceClient),
-		activeUserConn:     make(map[string]string),
+		//activeUserConn:     make(map[string]string),
+		RedisDBStore: RedisDBStoreInstance,
 	}
 }
 func (ds *DistributionServer) SendMessage(ctx context.Context, message *generatedCode.DistributionServerMessage) (*generatedCode.DistributionServerResponse, error) {
 
 	log.Printf("received message %s from end node.", message.Body)
 
-	receiverUserEndNodeAddress, exists := ds.activeUserConn[message.ReceiverId]
+	//receiverUserEndNodeAddress, exists := ds.activeUserConn[message.ReceiverId]
 
-	if !exists {
+	receiverUserEndNodeAddress, err := ds.RedisDBStore.FindUserEndServerAddress(message.ReceiverId)
+
+	if err != nil {
+		log.Println(err.Error())
 		log.Fatal("user not found in distribution server activeUserConn.")
 	}
 	endNodeClient, exists := ds.endServerClientMap[receiverUserEndNodeAddress]
 
 	if !exists {
-		log.Fatal("user not found in distribution server endServerClientMap.")
+		log.Fatal("end server client not found in distribution server endServerClientMap.")
 	}
 
 	endNodeMessage := generatedCode.EndServerMessage{ReceiverId: message.ReceiverId, SenderId: message.SenderId, Body: message.Body}
-	_, err := endNodeClient.ReceiveMessage(context.Background(), &endNodeMessage)
+	_, err = endNodeClient.ReceiveMessage(context.Background(), &endNodeMessage)
 
 	if err != nil {
 
@@ -52,9 +58,14 @@ func (ds *DistributionServer) SendMessage(ctx context.Context, message *generate
 
 func (ds *DistributionServer) UserConnected(ctx context.Context, connectionRequest *generatedCode.DistributionServerConnectionRequest) (*generatedCode.DistributionServerResponse, error) {
 
-	ds.activeUserConn[connectionRequest.UserId] = connectionRequest.EndServerAddress
+	err := ds.RedisDBStore.UserConnected(connectionRequest.UserId, connectionRequest.EndServerAddress)
+	//ds.activeUserConn[connectionRequest.UserId] = connectionRequest.EndServerAddress
 
-	fmt.Println(ds.activeUserConn)
+	if err != nil {
+		log.Println(err.Error())
+		log.Fatal("error while logging user connection status in redis db.")
+	}
+	//fmt.Println(ds.activeUserConn)
 	if _, exists := ds.endServerClientMap[connectionRequest.EndServerAddress]; !exists {
 
 		conn, err := grpc.NewClient(connectionRequest.EndServerAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -75,7 +86,11 @@ func (ds *DistributionServer) UserConnected(ctx context.Context, connectionReque
 
 func (ds *DistributionServer) UserDisconnected(ctx context.Context, disconnectionRequest *generatedCode.DistributionServerConnectionRequest) (*generatedCode.DistributionServerResponse, error) {
 
-	delete(ds.activeUserConn, disconnectionRequest.UserId)
+	err := ds.RedisDBStore.UserDisconnected(disconnectionRequest.UserId)
 
+	if err != nil {
+		log.Println(err.Error())
+		log.Fatal("error while logging user disconnection status.")
+	}
 	return &generatedCode.DistributionServerResponse{ResponseStatus: 200}, nil
 }
