@@ -1,13 +1,17 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"log"
+	"os"
 
 	database "github.com/Adarsh-Kmt/DistributionServer/database"
 	generatedCode "github.com/Adarsh-Kmt/DistributionServer/generatedCode"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 )
 
 type DistributionServer struct {
@@ -26,6 +30,66 @@ func NewDistributionServerInstance() *DistributionServer {
 		//activeUserConn:     make(map[string]string),
 		RedisDBStore: RedisDBStoreInstance,
 	}
+}
+
+func GenerateTLSConfigObjectForDistributionServer() *tls.Config {
+
+	DistributionServerCert, err := tls.LoadX509KeyPair("/app/DistributionServer.pem", "/app/DistributionServer-key.pem")
+
+	if err != nil {
+
+		log.Fatal("error while loading key pair of Distribution Server: " + err.Error())
+	}
+
+	RootCA := x509.NewCertPool()
+
+	caBytes, err := os.ReadFile("/app/root.pem")
+
+	if err != nil {
+
+		log.Fatal("error while reading root certificate from file in Distribution Server: " + err.Error())
+	}
+
+	if ok := RootCA.AppendCertsFromPEM(caBytes); !ok {
+
+		log.Fatal("failed to load certificate of root CA into certificate poll in Distribution Server.")
+	}
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{DistributionServerCert},
+		ClientCAs:    RootCA,
+	}
+
+	if err != nil {
+		log.Fatal("error while loading TLS certificate of Distribution Server.")
+	}
+
+	return tlsConfig
+
+}
+func NewGRPCDistributionServerInstance() *grpc.Server {
+
+	distributionServerInstance := NewDistributionServerInstance()
+
+	tlsConfig := GenerateTLSConfigObjectForDistributionServer()
+
+	GRPCDistributionServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.UnaryInterceptor(MiddlewareHandler))
+
+	generatedCode.RegisterDistributionServerMessageServiceServer(GRPCDistributionServer, distributionServerInstance)
+
+	return GRPCDistributionServer
+}
+
+func MiddlewareHandler(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	// you can write your own code here to check client tls certificate
+	if p, ok := peer.FromContext(ctx); ok {
+		if mtls, ok := p.AuthInfo.(credentials.TLSInfo); ok {
+			for _, item := range mtls.State.PeerCertificates {
+				log.Println("client certificate subject:", item.Subject)
+			}
+		}
+	}
+	return handler(ctx, req)
 }
 func (ds *DistributionServer) SendMessage(ctx context.Context, message *generatedCode.DistributionServerMessage) (*generatedCode.DistributionServerResponse, error) {
 
@@ -64,14 +128,21 @@ func (ds *DistributionServer) UserConnected(ctx context.Context, connectionReque
 	if err != nil {
 		log.Println(err.Error())
 		log.Fatal("error while logging user connection status in redis db.")
+	} else {
+		log.Println("received user connection request from " + connectionRequest.UserId)
 	}
 	//fmt.Println(ds.activeUserConn)
 	if _, exists := ds.endServerClientMap[connectionRequest.EndServerAddress]; !exists {
 
-		conn, err := grpc.NewClient(connectionRequest.EndServerAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		tlsConfig := GenerateTLSConfigObjectForDistributionServer()
+
+		conn, err := grpc.NewClient(connectionRequest.EndServerAddress, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 
 		if err != nil {
-			return &generatedCode.DistributionServerResponse{ResponseStatus: 500}, nil
+			return &generatedCode.DistributionServerResponse{ResponseStatus: 500}, err
+		} else {
+
+			log.Println("Distribution Server has successfully connected to End Server at address: " + connectionRequest.EndServerAddress)
 		}
 
 		endNodeClient := generatedCode.NewEndServerMessageServiceClient(conn)
