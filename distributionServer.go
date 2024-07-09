@@ -58,6 +58,7 @@ func GenerateTLSConfigObjectForDistributionServer() *tls.Config {
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{DistributionServerCert},
 		ClientCAs:    RootCA,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
 	}
 
 	if err != nil {
