@@ -6,8 +6,8 @@ option go_package  = "github.com/Adarsh-Kmt/DistributionServer/main";
 message EndServerMessage{
 
     string body = 1;
-    string senderId = 2;
-    string receiverId = 3;
+    string senderUsername = 2;
+    string receiverUsername = 3;
 
 }
 

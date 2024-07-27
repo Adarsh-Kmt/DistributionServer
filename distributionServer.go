@@ -97,10 +97,10 @@ func (ds *DistributionServer) SendMessage(ctx context.Context, message *generate
 
 	log.Printf("received message %s from end node.", message.Body)
 
-	receiverUserEndNodeAddress, err := ds.RedisDBStore.FindUserEndServerAddress(message.ReceiverId)
+	receiverUserEndNodeAddress, err := ds.RedisDBStore.FindUserEndServerAddress(message.ReceiverUsername)
 
 	if err == redis.Nil {
-		log.Println("user not found in routing table in redis DB. user " + message.ReceiverId + " is offline: " + err.Error())
+		log.Println("user not found in routing table in redis DB. user " + message.ReceiverUsername + " is offline: " + err.Error())
 		return &generatedCode.DistributionServerResponse{ResponseStatus: 404}, err
 	}
 	if err != nil {
@@ -114,7 +114,7 @@ func (ds *DistributionServer) SendMessage(ctx context.Context, message *generate
 		return &generatedCode.DistributionServerResponse{ResponseStatus: 500}, nil
 	}
 
-	endNodeMessage := generatedCode.EndServerMessage{ReceiverId: message.ReceiverId, SenderId: message.SenderId, Body: message.Body}
+	endNodeMessage := generatedCode.EndServerMessage{ReceiverUsername: message.ReceiverUsername, SenderUsername: message.SenderUsername, Body: message.Body}
 
 	_, err = endNodeClient.ReceiveMessage(context.Background(), &endNodeMessage)
 
@@ -128,13 +128,13 @@ func (ds *DistributionServer) SendMessage(ctx context.Context, message *generate
 
 func (ds *DistributionServer) UserConnected(ctx context.Context, connectionRequest *generatedCode.DistributionServerConnectionRequest) (*generatedCode.DistributionServerResponse, error) {
 
-	err := ds.RedisDBStore.UserConnected(connectionRequest.UserId, connectionRequest.EndServerAddress)
+	err := ds.RedisDBStore.UserConnected(connectionRequest.Username, connectionRequest.EndServerAddress)
 
 	if err != nil {
 		log.Println("error while logging user connection status in redis db." + err.Error())
 		return &generatedCode.DistributionServerResponse{ResponseStatus: 500}, err
 	} else {
-		log.Println("received user connection request from " + connectionRequest.UserId)
+		log.Println("received user connection request from " + connectionRequest.Username)
 	}
 
 	if _, exists := ds.endServerClientMap[connectionRequest.EndServerAddress]; !exists {
@@ -163,7 +163,7 @@ func (ds *DistributionServer) UserConnected(ctx context.Context, connectionReque
 
 func (ds *DistributionServer) UserDisconnected(ctx context.Context, disconnectionRequest *generatedCode.DistributionServerConnectionRequest) (*generatedCode.DistributionServerResponse, error) {
 
-	err := ds.RedisDBStore.UserDisconnected(disconnectionRequest.UserId)
+	err := ds.RedisDBStore.UserDisconnected(disconnectionRequest.Username)
 
 	if err != nil {
 		log.Println("error while logging user disconnection status." + err.Error())
