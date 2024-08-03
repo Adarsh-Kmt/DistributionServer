@@ -35,7 +35,7 @@ func NewDistributionServerInstance() *DistributionServer {
 
 func GenerateTLSConfigObjectForDistributionServer() *tls.Config {
 
-	DistributionServerCert, err := tls.LoadX509KeyPair("/app/DistributionServer.pem", "/app/DistributionServer-key.pem")
+	DistributionServerCert, err := tls.LoadX509KeyPair("/prod/DistributionServer.pem", "/prod/DistributionServer-key.pem")
 
 	if err != nil {
 
@@ -44,7 +44,7 @@ func GenerateTLSConfigObjectForDistributionServer() *tls.Config {
 
 	RootCA := x509.NewCertPool()
 
-	caBytes, err := os.ReadFile("/app/root.pem")
+	caBytes, err := os.ReadFile("/prod/root.pem")
 
 	if err != nil {
 
@@ -95,13 +95,16 @@ func MiddlewareHandler(ctx context.Context, req interface{}, info *grpc.UnarySer
 }
 func (ds *DistributionServer) SendMessage(ctx context.Context, message *generatedCode.DistributionServerMessage) (*generatedCode.DistributionServerResponse, error) {
 
-	log.Printf("received message %s from end node.", message.Body)
+	log.Printf("user %s sent message %s to %s end node", message.SenderUsername, message.Body, message.ReceiverUsername)
 
 	receiverUserEndNodeAddress, err := ds.RedisDBStore.FindUserEndServerAddress(message.ReceiverUsername)
 
+	response := &generatedCode.DistributionServerResponse{}
 	if err == redis.Nil {
-		log.Println("user not found in routing table in redis DB. user " + message.ReceiverUsername + " is offline: " + err.Error())
-		return &generatedCode.DistributionServerResponse{ResponseStatus: 404}, err
+		log.Println("user not found in routing table in redis DB. User " + message.ReceiverUsername + " is offline: " + err.Error())
+		response.ResponseStatus = 404
+		log.Println(response)
+		return response, nil
 	}
 	if err != nil {
 		log.Println("internal server error: " + err.Error())
@@ -116,12 +119,14 @@ func (ds *DistributionServer) SendMessage(ctx context.Context, message *generate
 
 	endNodeMessage := generatedCode.EndServerMessage{ReceiverUsername: message.ReceiverUsername, SenderUsername: message.SenderUsername, Body: message.Body}
 
-	_, err = endNodeClient.ReceiveMessage(context.Background(), &endNodeMessage)
+	endServerResponse, _ := endNodeClient.ReceiveMessage(context.Background(), &endNodeMessage)
 
-	if err != nil {
-		log.Println("failed to send message to end server with address " + receiverUserEndNodeAddress + ": " + err.Error())
-		return &generatedCode.DistributionServerResponse{ResponseStatus: 500}, nil
+	if endServerResponse.Status == 404 {
+		response.ResponseStatus = 404
+		log.Println("user " + message.ReceiverUsername + " is not online right now.")
+		return response, nil
 	}
+	log.Println("user " + message.ReceiverUsername + " has received message: " + message.Body + " from " + message.SenderUsername)
 	return &generatedCode.DistributionServerResponse{ResponseStatus: 200}, nil
 
 }
