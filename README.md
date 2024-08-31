@@ -1,5 +1,5 @@
 # DistributionServer
-### DistributionServer is used to route messages and other information between end servers that run on different containers.
+### DistributionServer is used to route messages and other information between [EndServer](https://github.com/Adarsh-Kmt/EndServer) containers.
 -----
 ## Features
 - Stores user to end server mapping in a redis database.
